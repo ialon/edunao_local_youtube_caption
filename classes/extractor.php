@@ -47,12 +47,12 @@ class extractor {
      * an array of unique URLs found. If no URLs are found, it returns false.
      *
      * @param string $prompt The text prompt to search for YouTube URLs.
-     * @return array|false An array of unique YouTube URLs or false if none are found.
+     * @return array An array of unique YouTube URLs.
      */
-    function extract_youtube_urls($prompt) {
+    public function extract_youtube_urls($prompt) {
         $pattern = '/https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w\-]+/';
         preg_match_all($pattern, $prompt, $matches);
-        return $matches[0] ? array_unique($matches[0]) : false;
+        return $matches[0] ? array_unique($matches[0]) : [];
     }
     
     /**
@@ -77,20 +77,13 @@ class extractor {
     }
     
     /**
-     * Processes a YouTube video URL to extract and return its captions.
+     * Processes a YouTube video URL to extract metadata and captions.
      *
-     * This function performs the following steps:
-     * 1. Fetches the content of the YouTube page using the provided video URL.
-     * 2. Checks if the content was successfully fetched.
-     * 3. Extracts the caption URL from the fetched YouTube page content.
-     * 4. Fetches the caption XML content from the extracted caption URL.
-     * 5. Parses the XML content to extract the transcript text.
-     * 6. Decodes HTML entities in the transcript text.
-     * 7. Outputs the transcript text.
+     * This method fetches the content of the YouTube page, extracts the title,
+     * description, and language, and attempts to retrieve captions if available.
      *
-     * @param string $videourl The URL of the YouTube video.
-     *
-     * @return string|bool The transcript text if successful, false otherwise.
+     * @param string $videourl The URL of the YouTube video to process.
+     * @return \stdClass|false An object containing video metadata and captions, or false on failure.
      */
     public function process_video($videourl) {
         // Fetch the content of the YouTube page
@@ -98,22 +91,44 @@ class extractor {
 
         // Check if the content was successfully fetched
         if ($videopage !== false) {
+            $video = new \stdClass();
+
+            // Add  the URL
+            $video->url = $videourl;
+
+            // Extract title
+            $pattern = '/<meta property="og:title" content="([^"]+)"/';
+            preg_match($pattern, $videopage, $matches);
+            $video->title = $matches[1];
+
+            // Extract description
+            $pattern = '/<meta property="og:description" content="([^"]+)"/';
+            preg_match($pattern, $videopage, $matches);
+            $video->description = $matches[1];
+
+            // Extract caption if available
             $captionurl = self::extract_caption_url($videopage);
+            $video->captionurl = $captionurl;
+            $video->caption = false;
 
             if ($captionurl !== false) {
+                // Extract lang parameter from caption URL
+                $pattern = '/lang=([^&]+)/';
+                preg_match($pattern, $captionurl, $matches);
+                $video->language = $matches[1];
+
                 $captionxml = self::get_web_page_content($captionurl);
                 $xml = simplexml_load_string($captionxml);
                 
-                $transcript = [];
+                $caption = [];
                 foreach ($xml->text as $text) {
-                    $transcript[] = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
+                    $caption[] = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
                 }
         
-                return implode("\n", $transcript);
-            } else {
-                // echo "Failed extracting caption URL.";
-                return false;
+                $video->caption = implode("\n", $caption);
             }
+
+            return $video;
         } else {
             // echo "Failed to fetch page content.";
             return false;
@@ -131,13 +146,14 @@ class extractor {
      * @return array An associative array of YouTube URLs and their corresponding transcripts.
      */
     public function process_prompt($prompt) {
-        $urls = self::extract_youtube_urls($prompt);
-        $transcripts = [];
-        if ($urls) {
+        $videos = [];
+
+        if ($urls = self::extract_youtube_urls($prompt)) {
             foreach ($urls as $url) {
-                $transcripts[$url] = self::process_video($url);
+                $videos[$url] = self::process_video($url);
             }
         }
-        return $transcripts;
+
+        return $videos;
     }
 }

@@ -24,9 +24,6 @@ class test_form extends moodleform {
 
         $mform =& $this->_form;
 
-        // Header
-        $mform->addElement('header','youtube_caption', get_string('youtube_caption', 'local_youtube_caption'));
-
         // AI Prompt
         $mform->addElement('textarea', 'prompt', get_string('aiprompt', 'local_youtube_caption'), 'wrap="virtual" rows="4" cols="30"');
         $mform->addRule('prompt', get_string('missingprompt', 'local_youtube_caption'), 'required', null, 'client');
